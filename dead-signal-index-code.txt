@@ -1,0 +1,520 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+  <meta name="theme-color" content="#08120f">
+  <title>Dead Signal — Multiplayer Zombie Survival</title>
+  <style>
+:root {
+  --ink: #e8eee8; --muted: #899b91; --green: #78f0ae; --green2: #28bf79;
+  --red: #ff5d5d; --amber: #ffd166; --bg: #050a08; --panel: rgba(12, 23, 18, .92);
+  --line: rgba(163, 219, 186, .16);
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: var(--bg); color: var(--ink); font-family: Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif; }
+body { background-image: radial-gradient(circle at 20% 20%, rgba(42, 122, 83, .17), transparent 36%), linear-gradient(125deg, #050b08, #08100c 52%, #030605); }
+button, input { font: inherit; }
+button { cursor: pointer; }
+.hidden { display: none !important; }
+.noise { position: fixed; inset: 0; pointer-events: none; opacity: .1; z-index: 100; background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.35'/%3E%3C/svg%3E"); }
+.panel { border: 1px solid var(--line); background: linear-gradient(145deg, rgba(18, 33, 26, .94), rgba(8, 16, 12, .97)); box-shadow: 0 25px 100px rgba(0,0,0,.42); }
+.menu-shell { min-height: 100%; display: grid; grid-template-columns: minmax(350px, 1.1fr) minmax(360px, .9fr); max-width: 1250px; margin: auto; align-items: center; gap: clamp(40px, 8vw, 120px); padding: 5vw; }
+.brand-panel h1 { font-size: clamp(76px, 10vw, 148px); line-height: .72; margin: 36px 0 30px; letter-spacing: -.09em; font-weight: 950; text-shadow: 0 8px 38px #000; }
+.brand-panel h1 em { color: var(--green); font-style: normal; -webkit-text-stroke: 1px rgba(255,255,255,.2); }
+.eyebrow, .panel-kicker, .danger-kicker, .hud-label { color: var(--green); letter-spacing: .22em; font-size: 11px; font-weight: 800; }
+.live-dot { display: inline-block; width: 7px; height: 7px; margin-right: 8px; border-radius: 50%; background: var(--green); box-shadow: 0 0 14px var(--green); animation: pulse 1.8s infinite; }
+@keyframes pulse { 50% { opacity: .3; } }
+.tagline { font-family: Georgia, serif; font-size: 22px; color: #c8d3cc; font-style: italic; }
+.broadcast-card { margin-top: 55px; display: flex; align-items: center; gap: 15px; color: var(--muted); font-size: 12px; }
+.broadcast-card b, .broadcast-card span { display: block; }
+.broadcast-card b { color: var(--ink); letter-spacing: .1em; margin-bottom: 5px; }
+.broadcast-icon { width: 46px; height: 46px; display: grid; place-items: center; border: 1px solid var(--line); color: var(--green); font-size: 25px; }
+.join-panel { padding: clamp(28px, 4vw, 48px); position: relative; overflow: hidden; }
+.join-panel::before { content: ''; position: absolute; width: 170px; height: 170px; right: -80px; top: -80px; border: 1px solid rgba(120,240,174,.16); border-radius: 50%; box-shadow: 0 0 0 25px rgba(120,240,174,.025), 0 0 0 50px rgba(120,240,174,.015); }
+.join-panel h2 { font: 32px/1.1 Georgia, serif; margin: 14px 0 34px; }
+label { display: block; font-size: 10px; letter-spacing: .18em; color: var(--muted); font-weight: 800; }
+input { width: 100%; color: var(--ink); background: rgba(1,5,3,.55); border: 1px solid var(--line); outline: 0; padding: 16px 17px; margin-top: 8px; text-transform: uppercase; letter-spacing: .12em; }
+input:focus { border-color: rgba(120,240,174,.65); box-shadow: 0 0 0 3px rgba(120,240,174,.06); }
+.color-row { display: flex; justify-content: space-between; align-items: center; color: var(--muted); font-size: 10px; letter-spacing: .18em; font-weight: 800; margin: 24px 0; }
+#colors { display: flex; gap: 8px; }
+.swatch { width: 23px; height: 23px; border-radius: 50%; border: 3px solid transparent; box-shadow: 0 0 0 1px rgba(255,255,255,.15); padding: 0; }
+.swatch.selected { border-color: #dfe9e2; transform: scale(1.15); }
+.primary, .secondary { min-height: 50px; border: 0; padding: 0 20px; letter-spacing: .13em; font-size: 11px; font-weight: 900; }
+.primary { width: 100%; color: #06110b; background: var(--green); display: flex; justify-content: space-between; align-items: center; box-shadow: 0 10px 35px rgba(40,191,121,.14); }
+.primary:hover { background: #9affc7; }
+.secondary { color: var(--green); background: rgba(120,240,174,.07); border: 1px solid rgba(120,240,174,.28); }
+.divider { display: flex; align-items: center; gap: 10px; margin: 22px 0; color: #66776e; font-size: 9px; letter-spacing: .16em; }
+.divider::before,.divider::after { content: ''; height: 1px; flex: 1; background: var(--line); }
+.join-row { display: grid; grid-template-columns: 1fr 90px; gap: 10px; }
+.join-row input { margin: 0; }
+.error { min-height: 18px; color: #ff8585; font-size: 12px; }
+.feature-strip { display: flex; justify-content: space-between; padding-top: 20px; margin-top: 10px; border-top: 1px solid var(--line); color: #617169; font-size: 8px; letter-spacing: .12em; }
+
+.lobby-shell { min-height: 100%; max-width: 1100px; margin: auto; padding: 7vh 5vw; display: grid; grid-template-columns: 1.5fr .8fr; gap: 24px; align-items: stretch; }
+.lobby-card,.briefing { padding: clamp(28px, 4vw, 48px); }
+.lobby-top { display: flex; align-items: flex-start; justify-content: space-between; border-bottom: 1px solid var(--line); padding-bottom: 22px; }
+.lobby-top h2 { margin: 8px 0 0; font: 34px Georgia, serif; }
+.lobby-top h2 span { color: var(--green); font-family: ui-monospace, monospace; letter-spacing: .14em; }
+.icon-button { border: 1px solid var(--line); color: var(--muted); background: transparent; padding: 10px; font-size: 9px; letter-spacing: .12em; }
+.lobby-note,.hint { color: var(--muted); font-size: 13px; }
+.player-list { min-height: 320px; margin: 25px 0; display: grid; align-content: start; gap: 10px; }
+.player-row { display: grid; grid-template-columns: 42px 1fr auto; align-items: center; gap: 13px; padding: 12px; background: rgba(255,255,255,.025); border: 1px solid rgba(255,255,255,.04); }
+.player-avatar { width: 34px; height: 34px; border-radius: 45% 45% 38% 38%; position: relative; }
+.player-avatar::after { content: ''; position: absolute; width: 17px; height: 9px; background: #bfe3dc; border-radius: 8px 3px 3px 8px; right: -3px; top: 8px; box-shadow: inset -4px -2px rgba(30,70,64,.35); }
+.player-row b { font-size: 13px; }.player-row small { display:block;color:#65776d;margin-top:3px;font-size:9px;letter-spacing:.1em; }
+.ready-state { font-size: 9px; letter-spacing: .12em; color: #708178; }.ready-state.ready { color: var(--green); }
+.lobby-actions { display: flex; gap: 12px; }.lobby-actions .primary { flex: 1; }.lobby-actions .secondary { flex: 1; }
+.briefing h3 { font: 28px/1.2 Georgia,serif; margin: 14px 0 35px; }
+.briefing ol { padding: 0; list-style: none; counter-reset: mission; }
+.briefing li { counter-increment: mission; display: grid; grid-template-columns: 35px 1fr; margin: 25px 0; }
+.briefing li::before { content: '0' counter(mission); color: var(--green); font: 11px ui-monospace; }
+.briefing li b,.briefing li span { display:block; }.briefing li b { font-size:12px;text-transform:uppercase;letter-spacing:.15em; }.briefing li span { color:var(--muted);font-size:12px;margin-top:5px;line-height:1.5; }
+
+.game-shell { position: fixed; inset: 0; background: #07100c; }
+#canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+.glass { background: rgba(5, 12, 9, .74); border: 1px solid rgba(189,255,216,.12); backdrop-filter: blur(12px); box-shadow: 0 12px 50px rgba(0,0,0,.25); }
+.game-header { position: fixed; top: 0; left: 0; right: 0; height: 58px; display: flex; align-items:center; gap: 20px; padding: 0 24px; background: linear-gradient(#07100dea, transparent); pointer-events:none; }
+.mini-brand { font-size:13px;letter-spacing:.12em;font-weight:900; }.mini-brand b{color:var(--green)}
+.room-pill { color:var(--muted);font-size:9px;letter-spacing:.12em;border-left:1px solid var(--line);padding-left:20px; }.room-pill b{color:var(--ink);margin-left:5px;}
+.connection { margin-left:auto;color:var(--green);font-size:9px;letter-spacing:.14em; }.connection span{display:inline-block;width:6px;height:6px;background:var(--green);border-radius:50%;margin-right:6px;box-shadow:0 0 10px var(--green)}
+.mission-hud { position: fixed; top: 76px; left: 20px; width: 265px; padding: 18px; }
+.hud-label { padding-bottom: 12px; margin-bottom: 12px; border-bottom: 1px solid var(--line); }
+.objective { display: grid; grid-template-columns: 15px 1fr; gap: 9px; align-items: center; color: #93a59a; font-size: 11px; margin: 10px 0; }
+.objective i { width: 10px; height: 10px; border: 1px solid #607168; transform: rotate(45deg); }
+.objective.done { color:#52635a;text-decoration:line-through; }.objective.done i { background:var(--green);border-color:var(--green);box-shadow:0 0 8px rgba(120,240,174,.5); }
+.objective.evac { color:var(--amber); }.objective.evac i { border-color:var(--amber);box-shadow:0 0 8px rgba(255,209,102,.4); }
+.status-hud { position:fixed;left:20px;bottom:22px;width:265px;padding:16px 18px; }
+.health-line { display:flex;justify-content:space-between;color:var(--muted);font-size:9px;letter-spacing:.15em; }.health-line b{color:var(--ink);font-size:11px;}
+.health-track {height:5px;background:#202d27;margin:8px 0 15px;overflow:hidden}.health-track i{display:block;height:100%;width:100%;background:linear-gradient(90deg,var(--green2),var(--green));transition:.2s}
+.ammo { font:36px/1 ui-monospace,monospace;color:var(--ink); }.ammo small{font-size:13px;color:#76877e}.ammo-label{color:#5f7167;font-size:8px;letter-spacing:.14em;margin-top:4px}
+.role-card { position:fixed;top:25%;left:50%;transform:translate(-50%,-50%);min-width:360px;text-align:center;padding:25px;background:#09130f;border:1px solid var(--green);box-shadow:0 0 90px rgba(75,220,139,.15);z-index:15;animation:roleIn .4s ease; }
+.role-card span{display:block;color:var(--muted);font-size:9px;letter-spacing:.2em}.role-card b{display:block;color:var(--green);font:35px Georgia;margin:10px}.role-card p{margin:0;color:#a8b6ae;font-size:12px}
+@keyframes roleIn{from{opacity:0;transform:translate(-50%,-65%) scale(.9)}}
+.alert { position:fixed;top:75px;left:50%;transform:translateX(-50%);z-index:20;background:rgba(117,16,16,.9);border:1px solid var(--red);padding:11px 22px;font-size:11px;letter-spacing:.11em;box-shadow:0 0 40px rgba(255,40,40,.25); }
+.prompt { position:fixed;left:50%;bottom:95px;transform:translateX(-50%);background:var(--ink);color:#09110d;padding:9px 16px;font-size:10px;font-weight:900;letter-spacing:.1em; }
+.chat-panel { position:fixed;right:20px;bottom:22px;width:290px;padding:10px; }
+#chatMessages { height:110px;overflow:auto;padding:3px 4px;font-size:11px;mask-image:linear-gradient(transparent,#000 20%); }
+.chat-message{margin:7px 0;color:#b1bdb6}.chat-message b{margin-right:7px}.chat-panel form{display:grid;grid-template-columns:1fr 35px;gap:5px}.chat-panel input{padding:10px;margin:0;text-transform:none;letter-spacing:0;font-size:11px}.chat-panel button{border:0;background:var(--green);font-weight:bold}
+.controls-help { position:fixed;right:20px;top:76px;padding:12px;display:flex;gap:15px;color:#65776d;font-size:8px;letter-spacing:.1em}.controls-help kbd{color:#b8c7be;font-family:inherit;margin-right:3px}
+.meeting-button,.infected-action{position:fixed;right:330px;bottom:22px;border:1px solid rgba(255,93,93,.45);background:rgba(102,15,15,.78);color:#ff9292;padding:15px 18px;font-size:9px;font-weight:900;letter-spacing:.13em}.infected-action{bottom:75px;background:rgba(55,125,76,.8);color:#a8ffc0;border-color:#6eff99}
+
+.overlay { position:fixed;inset:0;z-index:50;display:grid;place-items:center;background:rgba(2,5,4,.88);backdrop-filter:blur(9px); }
+.meeting-card,.end-card { width:min(680px,92vw);padding:40px;max-height:88vh;overflow:auto;text-align:center; }
+.danger-kicker{color:var(--red)}.meeting-card h2,.end-card h2{font:42px Georgia;margin:10px 0}.meeting-card>p,.end-card p{color:var(--muted)}
+.vote-list{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:30px 0}.vote-player{display:flex;align-items:center;gap:12px;padding:14px;border:1px solid var(--line);background:rgba(255,255,255,.025);color:var(--ink);text-align:left}.vote-player:hover{border-color:var(--green)}.vote-player:disabled{opacity:.4}.vote-dot{width:16px;height:16px;border-radius:50%}.meeting-bottom span{display:block;font:42px ui-monospace;color:var(--red)}.meeting-bottom small{font-size:8px;letter-spacing:.18em;color:var(--muted)}
+.end-card .primary{max-width:330px;margin:25px auto 0;justify-content:center}.end-card.survivors h2{color:var(--green)}.end-card.infected h2{color:var(--red)}
+.mobile-controls{display:none}
+
+@media(max-width:800px){
+  .menu-shell{display:block;overflow:auto;height:100%;padding:28px 18px}.brand-panel h1{font-size:72px;margin:24px 0 16px}.tagline{font-size:17px}.broadcast-card{display:none}.join-panel{margin-top:30px;padding:25px}.feature-strip{font-size:7px}
+  .lobby-shell{display:block;overflow:auto;height:100%;padding:18px}.briefing{margin-top:14px}.player-list{min-height:230px}.lobby-actions{flex-direction:column}
+  .game-header{padding:0 13px}.connection{display:none}.mission-hud{left:10px;top:62px;width:220px;padding:12px}.status-hud{left:10px;bottom:10px;width:175px;padding:12px}.chat-panel,.controls-help{display:none}.meeting-button,.infected-action{right:12px;bottom:150px}.infected-action{bottom:205px}
+  .mobile-controls{display:block}.joystick{position:fixed;left:18px;bottom:125px;width:104px;height:104px;border:1px solid rgba(255,255,255,.18);background:rgba(3,8,6,.35);border-radius:50%;touch-action:none}.joystick i{position:absolute;left:33px;top:33px;width:38px;height:38px;background:rgba(120,240,174,.32);border:1px solid var(--green);border-radius:50%}
+  .action{position:fixed;width:64px;height:64px;border-radius:50%;font-size:9px;font-weight:900;letter-spacing:.08em;color:white;touch-action:none}.action.shoot{right:18px;bottom:110px;background:rgba(148,31,31,.78);border:1px solid var(--red)}.action.interact{right:94px;bottom:72px;background:rgba(22,96,58,.8);border:1px solid var(--green)}.action.ability{right:20px;bottom:185px;background:rgba(97,31,117,.8);border:1px solid #d581ff}
+  .role-card{min-width:0;width:88vw}.vote-list{grid-template-columns:1fr}.meeting-card{padding:25px}.meeting-card h2,.end-card h2{font-size:32px}
+}
+
+  </style>
+</head>
+<body>
+  <div class="noise"></div>
+
+  <main id="menu" class="menu-shell">
+    <section class="brand-panel">
+      <div class="eyebrow"><span class="live-dot"></span> OUTBREAK NETWORK // ONLINE</div>
+      <h1>DEAD<br><em>SIGNAL</em></h1>
+      <p class="tagline">Trust is scarce. Ammunition is scarcer.</p>
+      <div class="broadcast-card">
+        <div class="broadcast-icon">⌁</div>
+        <div><b>EMERGENCY BROADCAST 07</b><span>One of you may already be infected.</span></div>
+      </div>
+    </section>
+
+    <section class="join-panel panel">
+      <div class="panel-kicker">SURVIVOR TERMINAL</div>
+      <h2>Enter the quarantine zone</h2>
+      <label>CALLSIGN<input id="nameInput" maxlength="16" autocomplete="nickname" placeholder="Your name"></label>
+      <div class="color-row"><span>SUIT COLOR</span><div id="colors"></div></div>
+      <button id="createBtn" class="primary">CREATE SAFEHOUSE <span>→</span></button>
+      <div class="divider"><span>OR JOIN A CREW</span></div>
+      <div class="join-row">
+        <input id="codeInput" maxlength="5" placeholder="ROOM CODE" autocomplete="off">
+        <button id="joinBtn" class="secondary">JOIN</button>
+      </div>
+      <p id="menuError" class="error"></p>
+      <div class="feature-strip"><span>2–10 PLAYERS</span><span>REAL-TIME</span><span>PHONE READY</span></div>
+    </section>
+  </main>
+
+  <main id="lobby" class="lobby-shell hidden">
+    <section class="lobby-card panel">
+      <div class="lobby-top">
+        <div><div class="panel-kicker">SECURE FREQUENCY</div><h2>Safehouse <span id="roomCode">-----</span></h2></div>
+        <button id="copyCode" class="icon-button">COPY CODE</button>
+      </div>
+      <p class="lobby-note">Share the code with your crew. The carrier is assigned when the host deploys.</p>
+      <div id="playerList" class="player-list"></div>
+      <div class="lobby-actions">
+        <button id="readyBtn" class="secondary">MARK READY</button>
+        <button id="startBtn" class="primary hidden">DEPLOY CREW <span>→</span></button>
+      </div>
+      <p id="lobbyHint" class="hint"></p>
+    </section>
+    <aside class="briefing panel">
+      <div class="panel-kicker">MISSION BRIEF</div>
+      <h3>Escape before trust collapses.</h3>
+      <ol>
+        <li><b>Restore</b><span>Bring three relay stations online.</span></li>
+        <li><b>Recover</b><span>Secure all four cure samples.</span></li>
+        <li><b>Survive</b><span>Find the hidden carrier—or become prey.</span></li>
+      </ol>
+    </aside>
+  </main>
+
+  <main id="game" class="game-shell hidden">
+    <canvas id="canvas"></canvas>
+    <header class="game-header">
+      <div class="mini-brand">DEAD <b>SIGNAL</b></div>
+      <div class="room-pill">ROOM <b id="hudCode">-----</b></div>
+      <div id="connection" class="connection"><span></span> LINKED</div>
+    </header>
+
+    <aside class="mission-hud glass">
+      <div class="hud-label">MISSION STATUS</div>
+      <div id="objectiveList"></div>
+      <div id="evacObjective" class="objective evac hidden"><i></i><span>Reach southeast evacuation</span></div>
+    </aside>
+
+    <aside class="status-hud glass">
+      <div class="health-line"><span>VITALS</span><b id="healthText">100</b></div>
+      <div class="health-track"><i id="healthBar"></i></div>
+      <div class="ammo"><span id="ammoText">8</span><small>/ <b id="reserveText">32</b></small></div>
+      <div class="ammo-label">SIDEARM // R TO RELOAD</div>
+    </aside>
+
+    <div id="roleCard" class="role-card hidden"><span>IDENTITY CONFIRMED</span><b id="roleTitle">SURVIVOR</b><p id="roleDescription"></p></div>
+    <div id="alert" class="alert hidden"></div>
+    <div id="prompt" class="prompt hidden">E&nbsp;&nbsp; INTERACT</div>
+
+    <section id="chatPanel" class="chat-panel glass">
+      <div id="chatMessages"></div>
+      <form id="chatForm"><input id="chatInput" maxlength="140" placeholder="Crew radio…"><button>↗</button></form>
+    </section>
+
+    <div class="controls-help glass"><span><kbd>WASD</kbd> MOVE</span><span><kbd>CLICK</kbd> FIRE</span><span><kbd>E</kbd> USE</span><span><kbd>Q</kbd> ABILITY</span></div>
+    <button id="meetingBtn" class="meeting-button hidden">CALL MEETING</button>
+    <button id="infectedAction" class="infected-action hidden">UNLEASH</button>
+
+    <div id="mobileControls" class="mobile-controls">
+      <div id="joystick" class="joystick"><i></i></div>
+      <button id="mobileShoot" class="action shoot">FIRE</button>
+      <button id="mobileInteract" class="action interact">USE</button>
+      <button id="mobileAbility" class="action ability hidden">Q</button>
+    </div>
+  </main>
+
+  <section id="meeting" class="overlay hidden">
+    <div class="meeting-card panel">
+      <div class="danger-kicker">SURVIVOR COUNCIL</div>
+      <h2>Who carries the infection?</h2>
+      <p id="meetingReason"></p>
+      <div id="voteList" class="vote-list"></div>
+      <div class="meeting-bottom"><span id="meetingTimer">30</span><small>SECONDS REMAIN</small></div>
+    </div>
+  </section>
+
+  <section id="endScreen" class="overlay hidden">
+    <div class="end-card panel">
+      <div id="endKicker" class="panel-kicker">TRANSMISSION ENDED</div>
+      <h2 id="endTitle">SURVIVORS ESCAPED</h2>
+      <p id="endMessage"></p>
+      <button id="againBtn" class="primary">RETURN TO SAFEHOUSE</button>
+    </div>
+  </section>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+const socket = io();
+
+const $ = id => document.getElementById(id);
+const screens = { menu: $('menu'), lobby: $('lobby'), game: $('game') };
+const colors = ['#54d6a7', '#ff6b6b', '#5aa9ff', '#ffd166', '#b98cff', '#ff8dc7', '#f39c4a', '#9ee493'];
+let selectedColor = colors[0];
+let state = null;
+let playerId = null;
+let roomCode = '';
+let currentRole = 'survivor';
+let input = { up: false, down: false, left: false, right: false, angle: 0 };
+let mouse = { x: innerWidth / 2, y: innerHeight / 2 };
+let camera = { x: 0, y: 0 };
+let voted = false;
+let lastStateAt = Date.now();
+
+const canvas = $('canvas');
+const ctx = canvas.getContext('2d');
+
+function show(name) {
+  Object.entries(screens).forEach(([key, node]) => node.classList.toggle('hidden', key !== name));
+}
+
+function escapeHtml(text) {
+  const div = document.createElement('div'); div.textContent = text; return div.innerHTML;
+}
+
+colors.forEach(color => {
+  const btn = document.createElement('button');
+  btn.className = 'swatch' + (color === selectedColor ? ' selected' : '');
+  btn.style.background = color; btn.title = color;
+  btn.onclick = () => {
+    selectedColor = color;
+    document.querySelectorAll('.swatch').forEach(x => x.classList.toggle('selected', x === btn));
+  };
+  $('colors').appendChild(btn);
+});
+
+function profile() {
+  return { name: $('nameInput').value || localStorage.getItem('deadSignalName') || 'Survivor', color: selectedColor };
+}
+
+function enterRoom(result) {
+  if (!result.ok) { $('menuError').textContent = result.error; return; }
+  playerId = result.playerId; roomCode = result.code; localStorage.setItem('deadSignalName', profile().name);
+  $('roomCode').textContent = roomCode; $('hudCode').textContent = roomCode;
+  $('menuError').textContent = ''; show('lobby');
+}
+
+$('nameInput').value = localStorage.getItem('deadSignalName') || '';
+$('createBtn').onclick = () => socket.emit('createRoom', profile(), enterRoom);
+$('joinBtn').onclick = () => socket.emit('joinRoom', { ...profile(), code: $('codeInput').value }, enterRoom);
+$('codeInput').addEventListener('input', e => e.target.value = e.target.value.toUpperCase().replace(/[^A-Z]/g, ''));
+$('codeInput').addEventListener('keydown', e => { if (e.key === 'Enter') $('joinBtn').click(); });
+$('copyCode').onclick = async () => {
+  try { await navigator.clipboard.writeText(roomCode); $('copyCode').textContent = 'COPIED'; setTimeout(() => $('copyCode').textContent = 'COPY CODE', 1200); } catch {}
+};
+$('readyBtn').onclick = () => {
+  const me = state?.players.find(p => p.id === playerId); socket.emit('setReady', !me?.ready);
+};
+$('startBtn').onclick = () => socket.emit('startGame', result => { if (!result.ok) $('lobbyHint').textContent = result.error; });
+$('againBtn').onclick = () => socket.emit('playAgain');
+
+socket.on('connect', () => { $('connection').innerHTML = '<span></span> LINKED'; });
+socket.on('disconnect', () => { $('connection').textContent = 'SIGNAL LOST'; });
+
+socket.on('role', role => {
+  currentRole = role.role;
+  $('roleTitle').textContent = role.title;
+  $('roleDescription').textContent = role.description;
+  $('roleCard').classList.remove('hidden');
+  $('infectedAction').classList.toggle('hidden', currentRole !== 'infected');
+  $('mobileAbility').classList.toggle('hidden', currentRole !== 'infected');
+  setTimeout(() => $('roleCard').classList.add('hidden'), 4800);
+});
+
+socket.on('toast', text => {
+  $('alert').textContent = text; $('alert').classList.remove('hidden');
+  setTimeout(() => $('alert').classList.add('hidden'), 3200);
+});
+
+socket.on('chat', msg => {
+  const row = document.createElement('div'); row.className = 'chat-message';
+  row.innerHTML = `<b style="color:${msg.color}">${escapeHtml(msg.name)}</b>${escapeHtml(msg.text)}`;
+  $('chatMessages').appendChild(row); $('chatMessages').scrollTop = 99999;
+});
+
+$('chatForm').onsubmit = event => {
+  event.preventDefault(); const value = $('chatInput').value.trim();
+  if (value) socket.emit('chat', value); $('chatInput').value = '';
+};
+
+socket.on('state', next => {
+  const oldPhase = state?.phase; state = next; lastStateAt = Date.now(); roomCode = next.code;
+  if (next.phase === 'lobby') {
+    show('lobby'); $('endScreen').classList.add('hidden'); renderLobby();
+  } else {
+    show('game'); renderHud();
+    if (next.phase === 'meeting') renderMeeting(); else { $('meeting').classList.add('hidden'); voted = false; }
+    if (next.phase === 'ended') renderEnd(); else $('endScreen').classList.add('hidden');
+  }
+  if (oldPhase !== 'play' && next.phase === 'play') requestAnimationFrame(draw);
+});
+
+function renderLobby() {
+  $('roomCode').textContent = state.code; $('hudCode').textContent = state.code;
+  $('playerList').innerHTML = state.players.map(p => `
+    <div class="player-row">
+      <div class="player-avatar" style="background:${p.color}"></div>
+      <div><b>${escapeHtml(p.name)}${p.id === state.hostId ? ' ★' : ''}</b><small>${p.id === playerId ? 'YOU' : p.id === state.hostId ? 'HOST' : 'CREW'}</small></div>
+      <div class="ready-state ${p.ready ? 'ready' : ''}">${p.ready ? 'READY' : 'STANDBY'}</div>
+    </div>`).join('');
+  const me = state.players.find(p => p.id === playerId);
+  $('readyBtn').textContent = me?.ready ? 'CANCEL READY' : 'MARK READY';
+  $('startBtn').classList.toggle('hidden', state.hostId !== playerId);
+  $('lobbyHint').textContent = state.players.length === 1 ? 'You can deploy solo to practice, or invite a friend for the hidden-carrier mode.' : `${state.players.filter(p=>p.ready).length}/${state.players.length} crew ready`;
+}
+
+function renderHud() {
+  const me = state.players.find(p => p.id === playerId); if (!me) return;
+  $('healthText').textContent = Math.ceil(me.health);
+  $('healthBar').style.width = `${me.health}%`;
+  $('healthBar').style.background = me.health < 35 ? 'var(--red)' : '';
+  $('ammoText').textContent = me.transformed ? '—' : me.ammo;
+  $('reserveText').textContent = me.transformed ? '—' : me.reserve;
+  $('objectiveList').innerHTML = state.objectives.map(o => `<div class="objective ${o.done ? 'done' : ''}"><i></i><span>${escapeHtml(o.label)}</span></div>`).join('');
+  $('evacObjective').classList.toggle('hidden', !state.evacOpen);
+  $('infectedAction').textContent = me.transformed ? 'HIDE MUTATION' : 'UNLEASH';
+  $('meetingBtn').classList.toggle('hidden', !me.alive || state.phase !== 'play' || Math.hypot(me.x - 1240, me.y - 1330) > 105);
+  const nearObjective = state.objectives.some(o => !o.done && Math.hypot(me.x-o.x, me.y-o.y)<85);
+  const nearBody = state.bodies.some(b => Math.hypot(me.x-b.x, me.y-b.y)<90);
+  $('prompt').classList.toggle('hidden', !me.alive || (!nearObjective && !nearBody));
+}
+
+function renderMeeting() {
+  $('meeting').classList.remove('hidden');
+  $('meetingReason').textContent = state.meeting.reason;
+  const living = state.players.filter(p => p.alive);
+  $('voteList').innerHTML = living.map(p => `<button class="vote-player" data-id="${p.id}"><i class="vote-dot" style="background:${p.color}"></i><span>${escapeHtml(p.name)}${p.id === playerId ? ' (you)' : ''}</span></button>`).join('') + '<button class="vote-player" data-id="skip"><i class="vote-dot" style="background:#79867f"></i><span>Skip vote</span></button>';
+  document.querySelectorAll('.vote-player').forEach(btn => btn.onclick = () => {
+    if (voted) return; voted = true; socket.emit('vote', btn.dataset.id);
+    document.querySelectorAll('.vote-player').forEach(x => x.disabled = true);
+  });
+  updateMeetingTimer();
+}
+
+function updateMeetingTimer() {
+  if (!state?.meeting || state.phase !== 'meeting') return;
+  $('meetingTimer').textContent = Math.max(0, Math.ceil((state.meeting.endsAt - Date.now()) / 1000));
+  requestAnimationFrame(updateMeetingTimer);
+}
+
+function renderEnd() {
+  $('endScreen').classList.remove('hidden');
+  const card = $('endScreen').querySelector('.end-card'); card.className = `end-card panel ${state.winner}`;
+  $('endTitle').textContent = state.winner === 'survivors' ? 'SURVIVORS ESCAPED' : 'INFECTION CONSUMED ALL';
+  $('endMessage').textContent = state.message;
+  $('againBtn').classList.toggle('hidden', state.hostId !== playerId);
+}
+
+const keys = { w:'up', arrowup:'up', s:'down', arrowdown:'down', a:'left', arrowleft:'left', d:'right', arrowright:'right' };
+addEventListener('keydown', e => {
+  if (document.activeElement?.tagName === 'INPUT') return;
+  const key = e.key.toLowerCase(); if (keys[key]) input[keys[key]] = true;
+  if (key === 'e') socket.emit('interact');
+  if (key === 'r') socket.emit('reload');
+  if (key === 'q' && currentRole === 'infected') socket.emit('transform');
+  if (key === 'x' && currentRole === 'infected') socket.emit('sabotage');
+  if (key === ' ' && currentRole === 'infected') { e.preventDefault(); socket.emit('bite'); }
+});
+addEventListener('keyup', e => { const key = e.key.toLowerCase(); if (keys[key]) input[keys[key]] = false; });
+canvas.addEventListener('mousemove', e => { mouse = { x: e.clientX, y: e.clientY }; });
+canvas.addEventListener('mousedown', e => { if (e.button === 0) fire(); });
+canvas.addEventListener('contextmenu', e => e.preventDefault());
+
+function fire() {
+  const me = state?.players.find(p => p.id === playerId); if (!me) return;
+  if (me.transformed && currentRole === 'infected') return socket.emit('bite');
+  if (me.ammo <= 0) return socket.emit('reload');
+  socket.emit('shoot', { angle: Math.atan2(mouse.y - innerHeight / 2, mouse.x - innerWidth / 2) });
+}
+
+$('infectedAction').onclick = () => socket.emit('transform');
+$('meetingBtn').onclick = () => socket.emit('callMeeting');
+$('mobileShoot').addEventListener('touchstart', e => { e.preventDefault(); fire(); });
+$('mobileInteract').addEventListener('touchstart', e => { e.preventDefault(); socket.emit('interact'); });
+$('mobileAbility').addEventListener('touchstart', e => { e.preventDefault(); socket.emit('transform'); });
+
+const joystick = $('joystick'), stick = joystick.querySelector('i');
+function moveStick(e) {
+  const touch = e.touches?.[0]; if (!touch) return;
+  const rect = joystick.getBoundingClientRect(), cx = rect.left + rect.width/2, cy = rect.top + rect.height/2;
+  let dx = touch.clientX-cx, dy = touch.clientY-cy; const length = Math.hypot(dx,dy), max=34;
+  if(length>max){dx=dx/length*max;dy=dy/length*max}
+  stick.style.transform=`translate(${dx}px,${dy}px)`;
+  input.left=dx < -10; input.right=dx > 10; input.up=dy < -10; input.down=dy > 10;
+}
+joystick.addEventListener('touchstart', e => {e.preventDefault();moveStick(e)}, {passive:false});
+joystick.addEventListener('touchmove', e => {e.preventDefault();moveStick(e)}, {passive:false});
+joystick.addEventListener('touchend', () => { stick.style.transform=''; input.left=input.right=input.up=input.down=false; });
+
+setInterval(() => {
+  if (state?.phase !== 'play') return;
+  const angle = Math.atan2(mouse.y - innerHeight / 2, mouse.x - innerWidth / 2);
+  input.angle = angle; socket.emit('input', input);
+}, 50);
+
+function resize() {
+  const dpr = Math.min(devicePixelRatio || 1, 2); canvas.width = innerWidth*dpr; canvas.height = innerHeight*dpr;
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+}
+addEventListener('resize', resize); resize();
+
+function worldToScreen(x,y){return{x:x-camera.x,y:y-camera.y}}
+
+function drawGrid() {
+  ctx.fillStyle='#09130f';ctx.fillRect(0,0,innerWidth,innerHeight);
+  const grid=80, ox=(-camera.x%grid), oy=(-camera.y%grid);
+  ctx.strokeStyle='rgba(133,181,153,.035)';ctx.lineWidth=1;ctx.beginPath();
+  for(let x=ox;x<innerWidth;x+=grid){ctx.moveTo(x,0);ctx.lineTo(x,innerHeight)}
+  for(let y=oy;y<innerHeight;y+=grid){ctx.moveTo(0,y);ctx.lineTo(innerWidth,y)}ctx.stroke();
+  // world boundary and faded road markings
+  const o=worldToScreen(0,0);ctx.strokeStyle='rgba(120,240,174,.18)';ctx.strokeRect(o.x,o.y,state.world.width,state.world.height);
+  ctx.strokeStyle='rgba(220,210,150,.08)';ctx.setLineDash([25,30]);ctx.beginPath();
+  let a=worldToScreen(0,650), b=worldToScreen(2400,650);ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);
+  a=worldToScreen(700,0);b=worldToScreen(700,1600);ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();ctx.setLineDash([]);
+}
+
+function drawWalls() {
+  state.walls.forEach(w=>{const p=worldToScreen(w.x,w.y);ctx.fillStyle='#17231d';ctx.fillRect(p.x,p.y,w.w,w.h);ctx.fillStyle='rgba(139,176,153,.11)';ctx.fillRect(p.x,p.y,w.w,3);ctx.strokeStyle='rgba(0,0,0,.3)';ctx.strokeRect(p.x+.5,p.y+.5,w.w-1,w.h-1)});
+  const zones=[{x:330,y:180,w:500,h:390,t:'NORTH RELAY'},{x:1050,y:120,w:620,h:300,t:'RESEARCH LAB'},{x:155,y:790,w:430,h:420,t:'TRIAGE'},{x:820,y:720,w:690,h:250,t:'DEPOT'},{x:1760,y:680,w:450,h:500,t:'DOCKS'},{x:1070,y:1220,w:420,h:250,t:'SAFEHOUSE'}];
+  ctx.font='700 10px ui-monospace';ctx.fillStyle='rgba(158,185,168,.16)';zones.forEach(z=>{const p=worldToScreen(z.x+20,z.y+35);ctx.fillText(z.t,p.x,p.y)});
+}
+
+function drawObjective(o) {
+  const p=worldToScreen(o.x,o.y), pulse=1+Math.sin(Date.now()/250)*.12;
+  ctx.save();ctx.translate(p.x,p.y);ctx.globalAlpha=o.done?.25:1;ctx.strokeStyle=o.type==='relay'?'#78f0ae':'#ffd166';ctx.lineWidth=2;
+  ctx.beginPath();ctx.arc(0,0,25*pulse,0,Math.PI*2);ctx.stroke();ctx.rotate(Math.PI/4);ctx.strokeRect(-10,-10,20,20);ctx.rotate(-Math.PI/4);
+  ctx.fillStyle=ctx.strokeStyle;ctx.font='700 9px ui-monospace';ctx.textAlign='center';ctx.fillText(o.done?'COMPLETE':o.type==='relay'?'RELAY':'SAMPLE',0,-37);ctx.restore();
+}
+
+function drawBody(b){const p=worldToScreen(b.x,b.y);ctx.save();ctx.translate(p.x,p.y);ctx.rotate(-.35);ctx.fillStyle=b.color;ctx.globalAlpha=.7;ctx.beginPath();ctx.ellipse(0,0,28,14,0,0,Math.PI*2);ctx.fill();ctx.fillStyle='#240a0a';ctx.beginPath();ctx.arc(12,3,8,0,Math.PI*2);ctx.fill();ctx.restore()}
+
+function drawPlayer(p) {
+  const q=worldToScreen(p.x,p.y);ctx.save();ctx.translate(q.x,q.y);ctx.rotate(p.angle);
+  if(!p.alive)ctx.globalAlpha=.23;
+  if(p.transformed){
+    ctx.shadowColor='#c82b61';ctx.shadowBlur=18;ctx.fillStyle='#7e2445';ctx.beginPath();
+    for(let i=0;i<12;i++){const a=i/12*Math.PI*2,r=i%2?18:28;ctx.lineTo(Math.cos(a)*r,Math.sin(a)*r)}ctx.closePath();ctx.fill();
+    ctx.fillStyle='#f4d8df';ctx.beginPath();ctx.arc(11,-6,4,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0;
+  }else{
+    ctx.fillStyle='rgba(0,0,0,.28)';ctx.beginPath();ctx.ellipse(-2,18,21,8,0,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle=p.color;roundRect(-18,-20,36,42,13);ctx.fill();
+    ctx.fillStyle=shade(p.color,-28);roundRect(-19,10,13,20,5);ctx.fill();roundRect(6,10,13,20,5);ctx.fill();
+    ctx.fillStyle='#bfe5de';roundRect(5,-14,20,11,5);ctx.fill();ctx.fillStyle='rgba(255,255,255,.35)';roundRect(8,-12,12,3,2);ctx.fill();
+    ctx.fillStyle='#101713';ctx.fillRect(18,-2,18,5);ctx.fillStyle='#788a80';ctx.fillRect(29,-4,9,9);
+  }
+  ctx.restore();ctx.save();ctx.translate(q.x,q.y);ctx.textAlign='center';ctx.font='700 10px system-ui';ctx.fillStyle=p.id===playerId?'#fff':'#a9b6ae';ctx.fillText(p.name,0,-34);
+  if(p.health<100&&p.alive){ctx.fillStyle='#1d2822';ctx.fillRect(-20,-28,40,3);ctx.fillStyle=p.health<35?'#ff5d5d':'#78f0ae';ctx.fillRect(-20,-28,40*p.health/100,3)}ctx.restore();
+}
+
+function drawZombie(z){const p=worldToScreen(z.x,z.y);ctx.save();ctx.translate(p.x,p.y);ctx.rotate(z.angle);ctx.fillStyle=z.kind==='runner'?'#b6b04b':'#638758';ctx.beginPath();ctx.ellipse(0,0,17,21,0,0,Math.PI*2);ctx.fill();ctx.strokeStyle='#87aa78';ctx.lineWidth=5;ctx.beginPath();ctx.moveTo(-9,7);ctx.lineTo(-26,16);ctx.moveTo(10,5);ctx.lineTo(28,12);ctx.stroke();ctx.fillStyle='#ff5252';ctx.beginPath();ctx.arc(8,-7,3,0,Math.PI*2);ctx.fill();ctx.restore()}
+
+function roundRect(x,y,w,h,r){ctx.beginPath();ctx.roundRect(x,y,w,h,r)}
+function shade(hex, amount){const n=parseInt(hex.slice(1),16),r=Math.max(0,Math.min(255,(n>>16)+amount)),g=Math.max(0,Math.min(255,((n>>8)&255)+amount)),b=Math.max(0,Math.min(255,(n&255)+amount));return`rgb(${r},${g},${b})`}
+
+function draw() {
+  if (!state || screens.game.classList.contains('hidden')) return;
+  const me=state.players.find(p=>p.id===playerId);
+  if(me){camera.x+=(me.x-innerWidth/2-camera.x)*.18;camera.y+=(me.y-innerHeight/2-camera.y)*.18}
+  ctx.clearRect(0,0,innerWidth,innerHeight);drawGrid();drawWalls();
+  state.objectives.forEach(drawObjective);
+  if(state.evacOpen){const p=worldToScreen(2300,1380);ctx.fillStyle='rgba(255,209,102,.12)';ctx.strokeStyle='#ffd166';ctx.lineWidth=2;ctx.fillRect(p.x-70,p.y-90,120,180);ctx.strokeRect(p.x-70,p.y-90,120,180);ctx.fillStyle='#ffd166';ctx.font='800 10px ui-monospace';ctx.fillText('EVAC',p.x-27,p.y-100)}
+  state.bodies.forEach(drawBody);state.zombies.forEach(drawZombie);
+  state.players.filter(p=>p.id!==playerId).forEach(drawPlayer);if(me)drawPlayer(me);
+  state.bullets.forEach(b=>{const p=worldToScreen(b.x,b.y);ctx.fillStyle='#ffe19a';ctx.shadowColor='#ffc64b';ctx.shadowBlur=8;ctx.beginPath();ctx.arc(p.x,p.y,3,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0});
+  if(state.blackout){const g=ctx.createRadialGradient(innerWidth/2,innerHeight/2,80,innerWidth/2,innerHeight/2,260);g.addColorStop(0,'rgba(0,0,0,0)');g.addColorStop(1,'rgba(0,0,0,.94)');ctx.fillStyle=g;ctx.fillRect(0,0,innerWidth,innerHeight);$('alert').textContent='GRID SABOTAGED // VISIBILITY LOST';$('alert').classList.remove('hidden')} else if($('alert').textContent.startsWith('GRID'))$('alert').classList.add('hidden');
+  renderHud();requestAnimationFrame(draw);
+}
+
+  </script>
+</body>
+</html>
