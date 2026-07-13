@@ -1,0 +1,398 @@
+const path = require('path');
+const http = require('http');
+const express = require('express');
+const { Server } = require('socket.io');
+
+const app = express();
+const server = http.createServer(app);
+const io = new Server(server, { cors: { origin: '*' } });
+
+const PORT = process.env.PORT || 3000;
+const TICK_RATE = 20;
+const WORLD = { width: 2400, height: 1600 };
+const PLAYER_SPEED = 245;
+const INFECTED_SPEED = 285;
+const ZOMBIE_SPEED = 82;
+const MAX_PLAYERS = 10;
+
+const walls = [
+  { x: 330, y: 180, w: 500, h: 28 }, { x: 330, y: 180, w: 28, h: 390 },
+  { x: 330, y: 542, w: 210, h: 28 }, { x: 650, y: 542, w: 180, h: 28 },
+  { x: 802, y: 180, w: 28, h: 155 }, { x: 802, y: 435, w: 28, h: 135 },
+  { x: 1050, y: 120, w: 620, h: 28 }, { x: 1050, y: 120, w: 28, h: 300 },
+  { x: 1050, y: 392, w: 230, h: 28 }, { x: 1390, y: 392, w: 280, h: 28 },
+  { x: 1642, y: 120, w: 28, h: 300 },
+  { x: 155, y: 790, w: 430, h: 28 }, { x: 155, y: 790, w: 28, h: 420 },
+  { x: 155, y: 1182, w: 430, h: 28 }, { x: 557, y: 790, w: 28, h: 170 },
+  { x: 557, y: 1060, w: 28, h: 150 },
+  { x: 820, y: 720, w: 690, h: 28 }, { x: 820, y: 720, w: 28, h: 250 },
+  { x: 820, y: 942, w: 265, h: 28 }, { x: 1205, y: 942, w: 305, h: 28 },
+  { x: 1482, y: 720, w: 28, h: 250 },
+  { x: 1760, y: 680, w: 450, h: 28 }, { x: 1760, y: 680, w: 28, h: 500 },
+  { x: 1760, y: 1152, w: 450, h: 28 }, { x: 2182, y: 680, w: 28, h: 500 },
+  { x: 1070, y: 1220, w: 420, h: 28 }, { x: 1070, y: 1220, w: 28, h: 250 },
+  { x: 1462, y: 1220, w: 28, h: 250 }, { x: 1070, y: 1442, w: 420, h: 28 }
+];
+
+const objectivesTemplate = [
+  { id: 'relay-north', type: 'relay', label: 'Restore north relay', x: 600, y: 350, done: false },
+  { id: 'relay-lab', type: 'relay', label: 'Restore lab relay', x: 1360, y: 270, done: false },
+  { id: 'relay-docks', type: 'relay', label: 'Restore docks relay', x: 1980, y: 920, done: false },
+  { id: 'sample-a', type: 'sample', label: 'Recover cure sample A', x: 420, y: 1000, done: false },
+  { id: 'sample-b', type: 'sample', label: 'Recover cure sample B', x: 1040, y: 840, done: false },
+  { id: 'sample-c', type: 'sample', label: 'Recover cure sample C', x: 1360, y: 1335, done: false },
+  { id: 'sample-d', type: 'sample', label: 'Recover cure sample D', x: 2000, y: 420, done: false }
+];
+
+const rooms = new Map();
+
+function makeCode() {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+  let code;
+  do code = Array.from({ length: 5 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+  while (rooms.has(code));
+  return code;
+}
+
+function cleanName(value) {
+  return String(value || '').replace(/[^a-zA-Z0-9 _-]/g, '').trim().slice(0, 16) || 'Survivor';
+}
+
+function makePlayer(socket, name, color) {
+  return {
+    id: socket.id, name: cleanName(name), color: /^#[0-9a-f]{6}$/i.test(color) ? color : '#54d6a7',
+    x: 1160 + Math.random() * 160, y: 1080 + Math.random() * 80, angle: 0,
+    vx: 0, vy: 0, health: 100, ammo: 8, reserve: 32, role: 'survivor',
+    transformed: false, alive: true, ready: false, kills: 0, vote: null,
+    lastShot: 0, lastBite: 0, lastInteract: 0, input: { up: false, down: false, left: false, right: false }
+  };
+}
+
+function makeRoom(hostSocket, name, color) {
+  const code = makeCode();
+  const player = makePlayer(hostSocket, name, color);
+  const room = {
+    code, hostId: hostSocket.id, phase: 'lobby', players: new Map([[hostSocket.id, player]]),
+    zombies: new Map(), bullets: new Map(), bodies: [], objectives: objectivesTemplate.map(o => ({ ...o })),
+    evacOpen: false, blackout: false, blackoutUntil: 0, startedAt: 0, nextZombieId: 1,
+    nextBulletId: 1, meeting: null, winner: null, message: 'Waiting for the host to start.'
+  };
+  rooms.set(code, room);
+  return room;
+}
+
+function playerPublic(p) {
+  return {
+    id: p.id, name: p.name, color: p.color, x: p.x, y: p.y, angle: p.angle,
+    health: p.health, ammo: p.ammo, reserve: p.reserve, alive: p.alive,
+    transformed: p.transformed, ready: p.ready, kills: p.kills
+  };
+}
+
+function snapshot(room) {
+  return {
+    code: room.code, hostId: room.hostId, phase: room.phase, world: WORLD, walls,
+    players: [...room.players.values()].map(playerPublic),
+    zombies: [...room.zombies.values()], bullets: [...room.bullets.values()], bodies: room.bodies,
+    objectives: room.objectives, evacOpen: room.evacOpen, blackout: room.blackout,
+    meeting: room.meeting ? {
+      reason: room.meeting.reason, caller: room.meeting.caller, endsAt: room.meeting.endsAt,
+      votes: [...room.players.values()].filter(p => p.vote).length
+    } : null,
+    winner: room.winner, message: room.message
+  };
+}
+
+function emitRoom(room) {
+  io.to(room.code).emit('state', snapshot(room));
+}
+
+function sendRole(room, p) {
+  io.to(p.id).emit('role', {
+    role: p.role,
+    title: p.role === 'infected' ? 'THE CARRIER' : 'SURVIVOR',
+    description: p.role === 'infected'
+      ? 'Stay hidden. Press Q to transform, bite survivors, and stop the evacuation.'
+      : 'Restore 3 relays, recover 4 cure samples, and reach the evacuation zone.'
+  });
+}
+
+function startGame(room) {
+  room.phase = 'play';
+  room.startedAt = Date.now();
+  room.winner = null;
+  room.bodies = [];
+  room.objectives = objectivesTemplate.map(o => ({ ...o }));
+  room.evacOpen = false;
+  const players = [...room.players.values()];
+  players.forEach((p, i) => Object.assign(p, {
+    x: 1160 + (i % 3) * 70, y: 1080 + Math.floor(i / 3) * 60, health: 100,
+    ammo: 8, reserve: 32, role: 'survivor', transformed: false, alive: true,
+    kills: 0, vote: null
+  }));
+  if (players.length >= 2) players[Math.floor(Math.random() * players.length)].role = 'infected';
+  room.zombies.clear(); room.bullets.clear();
+  for (let i = 0; i < Math.max(7, players.length * 3); i++) spawnZombie(room, true);
+  players.forEach(p => sendRole(room, p));
+  room.message = players.length >= 2 ? 'One survivor carries the infection.' : 'Solo survival protocol active.';
+}
+
+function spawnZombie(room, initial = false) {
+  const id = `z${room.nextZombieId++}`;
+  const edge = Math.floor(Math.random() * 4);
+  let x, y;
+  if (edge === 0) { x = 40; y = Math.random() * WORLD.height; }
+  if (edge === 1) { x = WORLD.width - 40; y = Math.random() * WORLD.height; }
+  if (edge === 2) { x = Math.random() * WORLD.width; y = 40; }
+  if (edge === 3) { x = Math.random() * WORLD.width; y = WORLD.height - 40; }
+  if (initial) { x = 100 + Math.random() * (WORLD.width - 200); y = 100 + Math.random() * 500; }
+  room.zombies.set(id, { id, x, y, health: 65, angle: 0, attackAt: 0, kind: Math.random() < .14 ? 'runner' : 'walker' });
+}
+
+function circleHitsWall(x, y, r) {
+  if (x < r || y < r || x > WORLD.width - r || y > WORLD.height - r) return true;
+  return walls.some(w => {
+    const cx = Math.max(w.x, Math.min(x, w.x + w.w));
+    const cy = Math.max(w.y, Math.min(y, w.y + w.h));
+    return (x - cx) ** 2 + (y - cy) ** 2 < r ** 2;
+  });
+}
+
+function moveEntity(entity, dx, dy, radius) {
+  const nx = entity.x + dx;
+  if (!circleHitsWall(nx, entity.y, radius)) entity.x = nx;
+  const ny = entity.y + dy;
+  if (!circleHitsWall(entity.x, ny, radius)) entity.y = ny;
+}
+
+function distance(a, b) { return Math.hypot(a.x - b.x, a.y - b.y); }
+
+function killPlayer(room, p, cause) {
+  if (!p.alive) return;
+  p.alive = false; p.health = 0; p.transformed = false;
+  room.bodies.push({ id: `body-${Date.now()}-${p.id}`, playerId: p.id, name: p.name, color: p.color, x: p.x, y: p.y, cause });
+  io.to(p.id).emit('toast', 'You are down. You can still watch the outbreak unfold.');
+}
+
+function damagePlayer(room, p, amount, cause) {
+  if (!p.alive) return;
+  p.health = Math.max(0, p.health - amount);
+  if (p.health <= 0) killPlayer(room, p, cause);
+}
+
+function checkWin(room) {
+  if (room.phase !== 'play') return;
+  const living = [...room.players.values()].filter(p => p.alive);
+  const threats = living.filter(p => p.role === 'infected');
+  const survivors = living.filter(p => p.role !== 'infected');
+  if (room.evacOpen && survivors.some(p => p.x > 2280 && p.y > 1260)) return endGame(room, 'survivors', 'The survivors escaped with the cure.');
+  if (room.players.size >= 3 && living.length > 1 && threats.length >= survivors.length) return endGame(room, 'infected', 'The carrier overwhelmed the survivors.');
+  if (living.length === 0 || (living.length === 1 && living[0].role === 'infected')) return endGame(room, 'infected', 'The dead claimed the city.');
+  if (room.players.size >= 2 && threats.length === 0) return endGame(room, 'survivors', 'The carrier was eliminated.');
+}
+
+function endGame(room, winner, message) {
+  room.phase = 'ended'; room.winner = winner; room.message = message;
+  emitRoom(room);
+}
+
+function beginMeeting(room, caller, reason) {
+  if (room.phase !== 'play') return;
+  room.phase = 'meeting';
+  room.players.forEach(p => { p.vote = null; });
+  room.meeting = { caller: caller.name, reason, endsAt: Date.now() + 30000 };
+  room.message = `${caller.name} called a survivor vote.`;
+  emitRoom(room);
+}
+
+function finishMeeting(room) {
+  if (!room.meeting) return;
+  const counts = new Map();
+  room.players.forEach(p => {
+    if (p.alive && p.vote && p.vote !== 'skip') counts.set(p.vote, (counts.get(p.vote) || 0) + 1);
+  });
+  const sorted = [...counts.entries()].sort((a, b) => b[1] - a[1]);
+  if (sorted.length && (!sorted[1] || sorted[0][1] > sorted[1][1])) {
+    const exiled = room.players.get(sorted[0][0]);
+    if (exiled?.alive) {
+      exiled.alive = false; exiled.health = 0;
+      room.message = `${exiled.name} was abandoned. ${exiled.role === 'infected' ? 'They were the carrier.' : 'They were innocent.'}`;
+    }
+  } else room.message = 'The vote tied. Nobody was abandoned.';
+  room.meeting = null; room.phase = 'play';
+  checkWin(room); emitRoom(room);
+}
+
+io.on('connection', socket => {
+  socket.on('createRoom', ({ name, color } = {}, ack = () => {}) => {
+    const room = makeRoom(socket, name, color);
+    socket.join(room.code); socket.data.roomCode = room.code;
+    ack({ ok: true, code: room.code, playerId: socket.id }); emitRoom(room);
+  });
+
+  socket.on('joinRoom', ({ code, name, color } = {}, ack = () => {}) => {
+    const room = rooms.get(String(code || '').toUpperCase().trim());
+    if (!room) return ack({ ok: false, error: 'Room not found.' });
+    if (room.phase !== 'lobby') return ack({ ok: false, error: 'That match already started.' });
+    if (room.players.size >= MAX_PLAYERS) return ack({ ok: false, error: 'That room is full.' });
+    room.players.set(socket.id, makePlayer(socket, name, color));
+    socket.join(room.code); socket.data.roomCode = room.code;
+    ack({ ok: true, code: room.code, playerId: socket.id }); emitRoom(room);
+  });
+
+  socket.on('setReady', ready => {
+    const room = rooms.get(socket.data.roomCode); const p = room?.players.get(socket.id);
+    if (p && room.phase === 'lobby') { p.ready = !!ready; emitRoom(room); }
+  });
+
+  socket.on('startGame', ack => {
+    const room = rooms.get(socket.data.roomCode);
+    if (!room || room.hostId !== socket.id || room.phase !== 'lobby') return ack?.({ ok: false, error: 'Only the host can start.' });
+    startGame(room); ack?.({ ok: true }); emitRoom(room);
+  });
+
+  socket.on('input', input => {
+    const room = rooms.get(socket.data.roomCode); const p = room?.players.get(socket.id);
+    if (!p || room.phase !== 'play' || !p.alive) return;
+    p.input = { up: !!input.up, down: !!input.down, left: !!input.left, right: !!input.right };
+    if (Number.isFinite(input.angle)) p.angle = input.angle;
+  });
+
+  socket.on('shoot', ({ angle } = {}) => {
+    const room = rooms.get(socket.data.roomCode); const p = room?.players.get(socket.id);
+    const now = Date.now();
+    if (!p || room.phase !== 'play' || !p.alive || p.transformed || p.ammo <= 0 || now - p.lastShot < 260) return;
+    p.lastShot = now; p.ammo--; p.angle = Number.isFinite(angle) ? angle : p.angle;
+    const id = `b${room.nextBulletId++}`;
+    room.bullets.set(id, { id, ownerId: p.id, x: p.x + Math.cos(p.angle) * 26, y: p.y + Math.sin(p.angle) * 26, vx: Math.cos(p.angle) * 830, vy: Math.sin(p.angle) * 830, born: now });
+  });
+
+  socket.on('reload', () => {
+    const room = rooms.get(socket.data.roomCode); const p = room?.players.get(socket.id);
+    if (!p || !p.alive || p.transformed || p.ammo >= 8 || p.reserve <= 0) return;
+    const need = Math.min(8 - p.ammo, p.reserve); p.ammo += need; p.reserve -= need;
+  });
+
+  socket.on('transform', () => {
+    const room = rooms.get(socket.data.roomCode); const p = room?.players.get(socket.id);
+    if (!p || room.phase !== 'play' || !p.alive || p.role !== 'infected') return;
+    p.transformed = !p.transformed;
+    io.to(p.id).emit('toast', p.transformed ? 'Mutation unleashed. Bite with SPACE or tap ATTACK.' : 'Human disguise restored.');
+  });
+
+  socket.on('bite', () => {
+    const room = rooms.get(socket.data.roomCode); const p = room?.players.get(socket.id); const now = Date.now();
+    if (!p || room.phase !== 'play' || !p.alive || p.role !== 'infected' || !p.transformed || now - p.lastBite < 1200) return;
+    const target = [...room.players.values()].filter(o => o.id !== p.id && o.alive && o.role !== 'infected').sort((a,b) => distance(p,a)-distance(p,b))[0];
+    if (target && distance(p, target) < 75) { p.lastBite = now; damagePlayer(room, target, 55, 'carrier attack'); }
+  });
+
+  socket.on('sabotage', () => {
+    const room = rooms.get(socket.data.roomCode); const p = room?.players.get(socket.id);
+    if (!p || room.phase !== 'play' || !p.alive || p.role !== 'infected' || p.transformed || room.blackout) return;
+    room.blackout = true; room.blackoutUntil = Date.now() + 12000; room.message = 'The city grid has failed. Visibility reduced.';
+  });
+
+  socket.on('interact', () => {
+    const room = rooms.get(socket.data.roomCode); const p = room?.players.get(socket.id); const now = Date.now();
+    if (!p || room.phase !== 'play' || !p.alive || now - p.lastInteract < 700) return;
+    p.lastInteract = now;
+    const objective = room.objectives.find(o => !o.done && distance(p, o) < 85);
+    if (objective && p.role !== 'infected') {
+      objective.done = true; p.reserve = Math.min(64, p.reserve + 8);
+      room.message = `${p.name} completed: ${objective.label}`;
+      room.evacOpen = room.objectives.every(o => o.done);
+      if (room.evacOpen) room.message = 'All objectives complete. Reach the southeast evacuation gate!';
+      return;
+    }
+    const body = room.bodies.find(b => distance(p, b) < 90);
+    if (body) beginMeeting(room, p, `${body.name}'s body was reported`);
+  });
+
+  socket.on('callMeeting', () => {
+    const room = rooms.get(socket.data.roomCode); const p = room?.players.get(socket.id);
+    if (p?.alive && room.phase === 'play' && Math.hypot(p.x - 1240, p.y - 1330) < 105) beginMeeting(room, p, 'Emergency radio activated');
+  });
+
+  socket.on('vote', targetId => {
+    const room = rooms.get(socket.data.roomCode); const p = room?.players.get(socket.id);
+    if (!p?.alive || room.phase !== 'meeting' || p.vote) return;
+    if (targetId === 'skip' || room.players.get(targetId)?.alive) p.vote = targetId;
+    const living = [...room.players.values()].filter(x => x.alive);
+    if (living.every(x => x.vote)) finishMeeting(room); else emitRoom(room);
+  });
+
+  socket.on('chat', text => {
+    const room = rooms.get(socket.data.roomCode); const p = room?.players.get(socket.id);
+    const clean = String(text || '').trim().slice(0, 140);
+    if (room && p && clean) io.to(room.code).emit('chat', { name: p.name, color: p.color, text: clean });
+  });
+
+  socket.on('playAgain', () => {
+    const room = rooms.get(socket.data.roomCode);
+    if (room?.hostId === socket.id && room.phase === 'ended') { room.phase = 'lobby'; room.players.forEach(p => { p.ready = false; p.alive = true; }); emitRoom(room); }
+  });
+
+  socket.on('disconnect', () => {
+    const room = rooms.get(socket.data.roomCode);
+    if (!room) return;
+    room.players.delete(socket.id);
+    if (!room.players.size) return rooms.delete(room.code);
+    if (room.hostId === socket.id) room.hostId = room.players.keys().next().value;
+    checkWin(room); emitRoom(room);
+  });
+});
+
+const gameLoop = setInterval(() => {
+  const dt = 1 / TICK_RATE; const now = Date.now();
+  rooms.forEach(room => {
+    if (room.phase === 'meeting' && room.meeting && now >= room.meeting.endsAt) finishMeeting(room);
+    if (room.phase !== 'play') return;
+    if (room.blackout && now >= room.blackoutUntil) room.blackout = false;
+
+    room.players.forEach(p => {
+      if (!p.alive) return;
+      let dx = Number(p.input.right) - Number(p.input.left);
+      let dy = Number(p.input.down) - Number(p.input.up);
+      const len = Math.hypot(dx, dy) || 1; dx /= len; dy /= len;
+      const speed = p.transformed ? INFECTED_SPEED : PLAYER_SPEED;
+      moveEntity(p, dx * speed * dt, dy * speed * dt, 20);
+    });
+
+    room.bullets.forEach((b, id) => {
+      b.x += b.vx * dt; b.y += b.vy * dt;
+      if (now - b.born > 1000 || circleHitsWall(b.x, b.y, 3)) return room.bullets.delete(id);
+      const zombie = [...room.zombies.values()].find(z => Math.hypot(z.x - b.x, z.y - b.y) < 23);
+      if (zombie) {
+        zombie.health -= 38; room.bullets.delete(id);
+        if (zombie.health <= 0) { room.zombies.delete(zombie.id); const owner = room.players.get(b.ownerId); if (owner) owner.kills++; }
+        return;
+      }
+      const owner = room.players.get(b.ownerId);
+      const carrier = [...room.players.values()].find(p => p.id !== b.ownerId && p.alive && p.transformed && Math.hypot(p.x - b.x, p.y - b.y) < 22);
+      if (carrier && owner?.role !== 'infected') { damagePlayer(room, carrier, 26, 'gunshot'); room.bullets.delete(id); }
+    });
+
+    room.zombies.forEach(z => {
+      const targets = [...room.players.values()].filter(p => p.alive && !p.transformed);
+      if (!targets.length) return;
+      const target = targets.reduce((best, p) => distance(z, p) < distance(z, best) ? p : best, targets[0]);
+      const d = distance(z, target); z.angle = Math.atan2(target.y - z.y, target.x - z.x);
+      if (d > 31) moveEntity(z, Math.cos(z.angle) * ZOMBIE_SPEED * (z.kind === 'runner' ? 1.7 : 1) * dt, Math.sin(z.angle) * ZOMBIE_SPEED * (z.kind === 'runner' ? 1.7 : 1) * dt, 18);
+      else if (now - z.attackAt > 850) { z.attackAt = now; damagePlayer(room, target, z.kind === 'runner' ? 13 : 9, 'zombie attack'); }
+    });
+
+    const desired = Math.max(7, room.players.size * 3) + Math.floor((now - room.startedAt) / 45000) * 2;
+    if (room.zombies.size < desired && Math.random() < .045) spawnZombie(room);
+    checkWin(room); emitRoom(room);
+  });
+}, 1000 / TICK_RATE);
+gameLoop.unref();
+
+app.use(express.static(path.join(__dirname, 'public')));
+app.get('/health', (_req, res) => res.json({ ok: true, rooms: rooms.size }));
+app.get('*', (_req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
+
+if (require.main === module) server.listen(PORT, () => console.log(`Dead Signal listening on http://localhost:${PORT}`));
+
+module.exports = { app, server, io, rooms, cleanName, circleHitsWall };
